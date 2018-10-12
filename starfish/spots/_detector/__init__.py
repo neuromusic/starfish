@@ -7,6 +7,10 @@ from starfish.imagestack.imagestack import ImageStack
 from starfish.pipeline import AlgorithmBase, import_all_submodules, PipelineComponent
 from starfish.types import Indices
 from . import _base
+from . import gaussian
+from . import pixel_spot_detector
+from . import trackpy_local_max_peak_finder
+from . import local_max_peak_finder
 
 import_all_submodules(__file__, __package__)
 
