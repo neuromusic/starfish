@@ -1,10 +1,12 @@
 from itertools import product
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 import pandas as pd
+import regional
 import xarray as xr
 
+from starfish.expression_matrix.expression_matrix import ExpressionMatrix
 from starfish.image._filter.util import preserve_float_range
 from starfish.types import Features, Indices, SpotAttributes
 
@@ -342,7 +344,11 @@ class IntensityTable(xr.DataArray):
         zmax = image_stack.shape['z'] - crop_z
         ymax = image_stack.shape['y'] - crop_y
         xmax = image_stack.shape['x'] - crop_x
-        data = image_stack.xarray.transpose(
+        cropped_stack = image_stack.sel({Indices.Z: (zmin, zmax),
+                                         Indices.Y: (ymin, ymax),
+                                         Indices.X: (xmin, xmax)})
+
+        data = cropped_stack.xarray.transpose(
             Indices.Z.value,
             Indices.Y.value,
             Indices.X.value,
@@ -350,10 +356,8 @@ class IntensityTable(xr.DataArray):
             Indices.ROUND.value,
         )
 
-        # crop and reshape imagestack to create IntensityTable data
-        cropped_data = data[zmin:zmax, ymin:ymax, xmin:xmax, :, :]
         # (pixels, ch, round)
-        intensity_data = cropped_data.values.reshape(
+        intensity_data = data.values.reshape(
             -1, image_stack.num_chs, image_stack.num_rounds)
 
         # IntensityTable pixel coordinates
@@ -383,6 +387,54 @@ class IntensityTable(xr.DataArray):
 
         """
         return pd.DataFrame(dict(self[Features.AXIS].coords))
+
+    def to_expression_matrix(self, regions: Optional[regional.many]=None) -> ExpressionMatrix:
+        """Generates a cell x gene count matrix where each cell is annotated with spatial metadata
+
+        Parameters
+        ----------
+        regions: Optional[regional.Many]
+            cell segmentation results that were used to assign points to cells. If not provided, the
+            centers of the cells will be estimated by taking the midpoint between the extreme-valued
+            spots on each axis.
+
+        Returns
+        -------
+        ExpressionMatrix :
+            cell x gene expression table
+        """
+
+        # create the 2-d counts matrix
+        grouped = self.to_features_dataframe().groupby(['cell_id', 'target'])
+        counts = grouped.count().iloc[:, 0].unstack().fillna(0)
+
+        if regions:
+            # counts.index stores cell_id, extract cell information from the regional.many object
+            metadata = {
+                "area": ("cells", [regions[id_].area for id_ in counts.index]),
+                "x": ("cells", [regions[id_].center[0] for id_ in counts.index]),
+                "y": ("cells", [regions[id_].center[1] for id_ in counts.index]),
+                "z": ("cells", np.zeros(counts.shape[0]))
+            }
+        else:
+            grouped = self.to_features_dataframe().groupby(['cell_id'])[['x', 'y', 'z']]
+            min_ = grouped.min()
+            max_ = grouped.max()
+            coordinate_df = min_ + (max_ - min_) / 2
+            metadata = {name: ("cells", data.values) for name, data in coordinate_df.items()}
+            metadata['area'] = ("cells", np.full(counts.shape[0], fill_value=np.nan))
+
+        # add genes to the metadata
+        metadata.update({"genes": counts.columns.values})
+        metadata.update({"cell_id": ("cells", counts.index.values)})
+
+        mat = ExpressionMatrix(
+            data=counts.values,
+            dims=('cells', 'genes'),
+            coords=metadata,
+            name='expression_matrix'
+        )
+        return mat
 
     def feature_trace_magnitudes(self) -> np.ndarray:
         """Return the magnitudes of each feature across rounds and channels

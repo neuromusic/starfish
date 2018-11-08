@@ -1,14 +1,14 @@
 # Definition of the processing class
-import argparse
 from functools import partial
 from typing import Callable, Optional, Tuple, Union
 
+import click
 import numpy as np
 from scipy.ndimage import gaussian_laplace
 
 from starfish.image._filter._base import FilterAlgorithmBase
 from starfish.image._filter.util import (
-    determine_axes_to_split_by,
+    determine_axes_to_group_by,
     preserve_float_range,
     validate_and_broadcast_kernel_size,
 )
@@ -34,7 +34,7 @@ class Laplace(FilterAlgorithmBase):
     def __init__(
             self,
             sigma: Union[Number, Tuple[Number]], mode: str='reflect',
-            cval: float=0.0, is_volume: bool=False, **kwargs
+            cval: float=0.0, is_volume: bool=False,
     ) -> None:
         """Multi-dimensional gaussian-laplacian filter used to enhance dots against background
 
@@ -80,21 +80,6 @@ class Laplace(FilterAlgorithmBase):
 
     _DEFAULT_TESTING_PARAMETERS = {"sigma": 0.5}
 
-    @classmethod
-    def _add_arguments(cls, group_parser: argparse.ArgumentParser) -> None:
-        group_parser.add_argument(
-            "--sigma", type=float,
-            help="Standard deviation of gaussian kernel for spot enhancement")
-        group_parser.add_argument(
-            "--mode", default="reflect",
-            help="How the input array is extended when the filter overlaps a border")
-        group_parser.add_argument(
-            "--cval", default=0.0,
-            help="Value to fill past edges of input if mode is ‘constant")
-        group_parser.add_argument(
-            "--is-volume", action="store_true",
-            help="indicates that the image stack should be filtered in 3d")
-
     @staticmethod
     def _gaussian_laplace(image: np.ndarray, sigma: Union[Number, Tuple[Number]],
                           mode: str = 'reflect', cval: float = 0.0) -> np.ndarray:
@@ -124,9 +109,27 @@ class Laplace(FilterAlgorithmBase):
         ImageStack :
             if in-place is False, return the results of filter as a new stack
         """
-        split_by = determine_axes_to_split_by(self.is_volume)
+        group_by = determine_axes_to_group_by(self.is_volume)
         apply_filtering: Callable = partial(self._gaussian_laplace, sigma=self.sigma)
         return stack.apply(
             apply_filtering,
-            split_by=split_by, verbose=verbose, in_place=in_place, n_processes=n_processes,
+            group_by=group_by, verbose=verbose, in_place=in_place, n_processes=n_processes,
         )
+
+    @staticmethod
+    @click.command("Laplace")
+    @click.option(
+        "--sigma", type=float,
+        help="Standard deviation of gaussian kernel for spot enhancement")
+    @click.option(
+        "--mode", default="reflect",
+        help="How the input array is extended when the filter overlaps a border")
+    @click.option(
+        "--cval", default=0.0,
+        help="Value to fill past edges of input if mode is ‘constant")
+    @click.option(
+        "--is-volume", is_flag=True,
+        help="indicates that the image stack should be filtered in 3d")
+    @click.pass_context
+    def _cli(ctx, sigma, mode, cval, is_volume):
+        ctx.obj["component"]._cli_run(ctx, Laplace(sigma, mode, cval, is_volume))
