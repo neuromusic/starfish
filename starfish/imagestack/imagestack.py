@@ -135,8 +135,8 @@ class ImageStack:
             elif tile.tile_shape is not None and self._tile_shape != tile.tile_shape:
                 raise ValueError("Starfish does not support tiles that are not identical in shape")
 
-        shape: MutableSequence[int] = []
-        dims: MutableSequence[str] = []
+        data_shape: MutableSequence[int] = []
+        data_dimensions: MutableSequence[str] = []
         coordinates_shape: MutableSequence[int] = []
         coordinates_dimensions: MutableSequence[str] = []
         coordinates_tick_marks: MutableMapping[str, Sequence[Union[int, str]]] = dict()
@@ -154,14 +154,14 @@ class ImageStack:
                 raise ValueError(
                     f"Could not find entry for the {ix}th axis in AXES_DATA")
 
-            shape.append(size_for_axis)
-            dims.append(dim_for_axis.value)
+            data_shape.append(size_for_axis)
+            data_dimensions.append(dim_for_axis.value)
             coordinates_shape.append(size_for_axis)
             coordinates_dimensions.append(dim_for_axis.value)
             coordinates_tick_marks[dim_for_axis.value] = list(range(size_for_axis))
 
-        shape.extend(self._tile_shape)
-        dims.extend([Indices.Y.value, Indices.X.value])
+        data_shape.extend(self._tile_shape)
+        data_dimensions.extend([Indices.Y.value, Indices.X.value])
         coordinates_shape.append(6)
         coordinates_dimensions.append(PHYSICAL_COORDINATE_DIMENSION)
         coordinates_tick_marks[PHYSICAL_COORDINATE_DIMENSION] = [
@@ -174,10 +174,10 @@ class ImageStack:
         ]
         # now that we know the tile data type (kind and size), we can allocate the data array.
         self._data = MPDataArray.from_shape_and_dtype(
-            shape=shape,
+            shape=data_shape,
             dtype=np.float32,
             initial_value=0,
-            dims=dims,
+            dims=data_dimensions,
         )
         self._coordinates = xr.DataArray(
             np.empty(
