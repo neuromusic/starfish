@@ -11,6 +11,7 @@ from starfish.image import (
     Registration,
     Segmentation,
 )
+from starfish.orgjson import OrgJsonCommand
 from starfish.spots import (
     Decoder,
     SpotFinder,
