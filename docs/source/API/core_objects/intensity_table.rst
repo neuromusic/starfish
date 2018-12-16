@@ -3,5 +3,5 @@
 IntensityTable
 ==============
 
-.. automodule:: starfish.intensity_table
+.. automodule:: starfish.intensity_table.intensity_table
    :members:
